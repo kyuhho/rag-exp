@@ -1,15 +1,8 @@
 # PoisonedRAG
 
-Official repo of [USENIX Security 2025](https://www.usenix.org/conference/usenixsecurity25) paper: [PoisonedRAG: Knowledge Corruption Attacks to Retrieval-Augmented Generation of Large Language Models](https://arxiv.org/abs/2402.07867).
+This is a test repository for PoisonedRAG experiments.
 
-The first knowledge database corruption attack against Retrievals-Augmented Generation (RAG) system.
 
-## 🚀 News
-🎉 Jun 20, 2024: **PoisonedRAG gets accepted to [USENIX Security 2025](https://www.usenix.org/conference/usenixsecurity25)!**
-
-🔥 Apr 20, 2024: **If you have any question or need other code or data, feel free to open an issue or email us!**
-
-![Illustration of PoisonedRAG](PoisonedRAG.png "Illustration of PoisonedRAG")
 
 ## 🔍 Quick Usage
 
