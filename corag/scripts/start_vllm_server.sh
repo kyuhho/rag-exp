@@ -17,7 +17,13 @@ if nc -z localhost 8000; then
 else
   echo "Starting VLLM server..."
 
-  PROC_PER_NODE=$(nvidia-smi --list-gpus | wc -l)
+  if [ -n "$CUDA_VISIBLE_DEVICES" ]; then
+      PROC_PER_NODE=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l)
+      echo "CUDA_VISIBLE_DEVICES detected. Using ${PROC_PER_NODE} GPUs."
+  else
+      PROC_PER_NODE=$(nvidia-smi --list-gpus | wc -l)
+      echo "Using all ${PROC_PER_NODE} GPUs."
+  fi
   vllm serve "${MODEL_NAME_OR_PATH}" \
     --dtype auto \
     --disable-log-requests --disable-custom-all-reduce \
