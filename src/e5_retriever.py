@@ -5,7 +5,10 @@ import json
 import torch
 import torch.nn.functional as F
 from typing import List, Dict, Tuple, Optional
-from models.encoder import SimpleEncoder
+try:
+    from .models.encoder import SimpleEncoder
+except (ImportError, ValueError):
+    from models.encoder import SimpleEncoder
 
 class E5_Retriever:
     """
@@ -30,6 +33,12 @@ class E5_Retriever:
         # 1. Load Data (Clean + Poisoned)
         clean_corpus = self._load_corpus(corpus_path)
         clean_embeddings = self._load_embeddings_from_dir(index_dir)
+        
+        # [CRITICAL] Truncate corpus if index is smaller (indexing might be incomplete)
+        if clean_embeddings is not None and len(clean_corpus) > clean_embeddings.shape[0]:
+            print(f"Warning: Clean corpus ({len(clean_corpus)}) is larger than clean index ({clean_embeddings.shape[0]}). Truncating corpus to match.")
+            clean_corpus = clean_corpus[:clean_embeddings.shape[0]]
+            
         self.num_clean_docs = len(clean_corpus)
         
         poison_corpus = self._load_corpus(poisoned_corpus_path) if poisoned_corpus_path else []
@@ -49,6 +58,10 @@ class E5_Retriever:
         if all_embs:
             self.all_embeddings = torch.cat(all_embs, dim=0).to(self.device)
             print(f"Total Index loaded. Shape: {self.all_embeddings.shape}")
+            
+            # Final sanity check
+            if len(self.corpus) != self.all_embeddings.shape[0]:
+                raise ValueError(f"CRITICAL: Corpus size ({len(self.corpus)}) does not match Index size ({self.all_embeddings.shape[0]})!")
         else:
             self.all_embeddings = None
             print("Warning: No embeddings loaded.")
