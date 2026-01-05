@@ -4,12 +4,18 @@ This repository evaluates the robustness of various RAG (Retrieval-Augmented Gen
 
 ## Environment Setup
 
-Each architecture requires a specific environment. You can install them using the provided requirements files:
-
+### 1. Install Base Packages
 - **Standard RAG/LLM**: `pip install -r requirements_rag.txt`
 - **ReAct**: `pip install -r requirements_react.txt`
 - **Self-RAG**: `pip install -r requirements_selfrag.txt`
 - **CoRAG**: `pip install -r requirements_corag.txt`
+
+### 2. Install Flash Attention (Optional but Recommended)
+Some architectures (especially CoRAG and ReAct) perform better with Flash Attention. Install it separately to avoid installation conflicts:
+
+```bash
+pip install flash-attn --no-build-isolation
+```
 
 ## Dataset Preparation
 
