@@ -29,10 +29,11 @@ def _normalize_subquery(subquery: str) -> str:
 class CoRagAgent:
 
     def __init__(
-            self, vllm_client: VllmClient, corpus: Dataset
+            self, vllm_client: VllmClient, corpus: Dataset, retriever=None
     ):
         self.vllm_client = vllm_client
         self.corpus = corpus
+        self.retriever = retriever  # 오염된 리트리버 주입용
         self.tokenizer: PreTrainedTokenizerFast = AutoTokenizer.from_pretrained(get_vllm_model_id())
         self.lock = threading.Lock()
 
@@ -43,14 +44,17 @@ class CoRagAgent:
             temperature: float = 0.7,
             **kwargs
     ) -> RagPath:
-        past_subqueries: List[str] = kwargs.pop('past_subqueries', [])
-        past_subanswers: List[str] = kwargs.pop('past_subanswers', [])
-        past_doc_ids: List[List[str]] = kwargs.pop('past_doc_ids', [])
-        assert len(past_subqueries) == len(past_subanswers) == len(past_doc_ids)
+        past_subqueries: List[str] = []
+        past_subanswers: List[str] = []
+        past_doc_ids: List[List] = []
+        past_documents: List[List[str]] = []
+        past_poisoned_flags: List[List[bool]] = []
+        assert len(past_subqueries) == len(past_subanswers) == len(past_doc_ids) == len(past_documents) == len(past_poisoned_flags)
 
         subquery_temp: float = temperature
         num_llm_calls: int = 0
         max_num_llm_calls: int = 4 * (max_path_length - len(past_subqueries))
+
         while len(past_subqueries) < max_path_length and num_llm_calls < max_num_llm_calls:
             num_llm_calls += 1
             messages: List[Dict] = get_generate_subquery_prompt(
@@ -68,20 +72,31 @@ class CoRagAgent:
                 subquery_temp = max(subquery_temp, 0.7)
                 continue
 
+            
+            print(f'[Subquery] {subquery}')
+            print("-"*50)
+            
             subquery_temp = temperature
-            subanswer, doc_ids = self._get_subanswer_and_doc_ids(
+            subanswer, doc_ids, documents, poisoned_flags = self._get_subanswer_and_doc_ids(
                 subquery=subquery, max_message_length=max_message_length
             )
+
+            print(f'[Subanswer] {subanswer}')
+            print("-"*50)
 
             past_subqueries.append(subquery)
             past_subanswers.append(subanswer)
             past_doc_ids.append(doc_ids)
+            past_documents.append(documents)
+            past_poisoned_flags.append(poisoned_flags)
 
         return RagPath(
             query=query,
             past_subqueries=past_subqueries,
             past_subanswers=past_subanswers,
             past_doc_ids=past_doc_ids,
+            past_documents=past_documents,
+            past_poisoned_flags=past_poisoned_flags,
         )
 
     def generate_final_answer(
@@ -127,10 +142,34 @@ class CoRagAgent:
 
     def _get_subanswer_and_doc_ids(
             self, subquery: str, max_message_length: int = 4096
-    ) -> Tuple[str, List]:
-        retriever_results: List[Dict] = search_by_http(query=subquery)
-        doc_ids: List[str] = [res['doc_id'] for res in retriever_results]
-        documents: List[str] = [format_input_context(self.corpus[int(doc_id)]) for doc_id in doc_ids][::-1]
+    ) -> Tuple[str, List, List[str], List[bool]]:
+        if self.retriever is not None:
+            # E5_Retriever 직접 사용 (서버 우회)
+            retriever_results = self.retriever.search(subquery, k=5)
+
+            print(f"[Retriever Results] {retriever_results}")
+            print("-"*50)
+            # documents와 doc_ids를 생성
+            # doc_ids maybe [-1, -1, -1, -1, -1]
+            doc_ids = [res.get('doc_id', -1) for res in retriever_results]
+            print(f"[Doc_IDs] {doc_ids}")
+            poisoned_flags = [res.get('is_poisoned', False) for res in retriever_results]
+            # 리트리버가 준 contents를 우선적으로 사용 (코퍼스 불일치 방지)
+            documents = []
+            for res in retriever_results:
+                # format_input_context와 동일한 형식으로 맞춤
+                doc_dict = {'title': res.get('title', ''), 'contents': res.get('contents', '')}
+                documents.append(format_input_context(doc_dict))
+            documents = documents[::-1]
+            poisoned_flags = poisoned_flags[::-1] # documents 순서와 맞춤
+            print(f"[Documents] {documents}")
+            print("-"*50)
+        else:
+            # 기존 방식 (HTTP 서버 사용)
+            retriever_results: List[Dict] = search_by_http(query=subquery)
+            doc_ids: List[str] = [res['doc_id'] for res in retriever_results]
+            documents: List[str] = [format_input_context(self.corpus[int(doc_id)]) for doc_id in doc_ids][::-1]
+            poisoned_flags = [False] * len(doc_ids) # 기존 방식은 오염 여부 모름
 
         messages: List[Dict] = get_generate_intermediate_answer_prompt(
             subquery=subquery,
@@ -139,7 +178,7 @@ class CoRagAgent:
         self._truncate_long_messages(messages, max_length=max_message_length)
 
         subanswer: str = self.vllm_client.call_chat(messages=messages, temperature=0., max_tokens=128)
-        return subanswer, doc_ids
+        return subanswer, doc_ids, documents, poisoned_flags
 
     def tree_search(
             self, query: str, task_desc: str,
@@ -188,7 +227,7 @@ class CoRagAgent:
             expand_size: int = 4, num_rollouts: int = 2, beam_size: int = 1,
             **kwargs
     ) -> RagPath:
-        candidates: List[RagPath] = [RagPath(query=query, past_subqueries=[], past_subanswers=[], past_doc_ids=[])]
+        candidates: List[RagPath] = [RagPath(query=query, past_subqueries=[], past_subanswers=[], past_doc_ids=[], past_documents=[], past_poisoned_flags=[])]
         for step in range(max_path_length):
             new_candidates: List[RagPath] = []
             for candidate in candidates:
@@ -201,11 +240,13 @@ class CoRagAgent:
                 for subquery in new_subqueries:
                     new_candidate: RagPath = deepcopy(candidate)
                     new_candidate.past_subqueries.append(subquery)
-                    subanswer, doc_ids = self._get_subanswer_and_doc_ids(
+                    subanswer, doc_ids, documents, poisoned_flags = self._get_subanswer_and_doc_ids(
                         subquery=subquery, max_message_length=max_message_length
                     )
                     new_candidate.past_subanswers.append(subanswer)
                     new_candidate.past_doc_ids.append(doc_ids)
+                    new_candidate.past_documents.append(documents)
+                    new_candidate.past_poisoned_flags.append(poisoned_flags)
                     new_candidates.append(new_candidate)
 
             if len(new_candidates) > beam_size:

@@ -9,6 +9,7 @@ def search_by_http(query: str, host: str = 'localhost', port: int = 8090) -> Lis
     url = f"http://{host}:{port}"
     response = requests.post(url, json={'query': query})
 
+    print(f"[RESPONSE]: {response.json()}")
     if response.status_code == 200:
         return response.json()
     else:
