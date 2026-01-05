@@ -1,0 +1,13 @@
+gym
+requests
+beautifulsoup4
+numpy
+vllm
+jupyter
+torch
+transformers
+datasets
+tqdm
+google-generativeai
+fastchat
+accelerate

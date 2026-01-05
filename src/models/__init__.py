@@ -1,7 +1,22 @@
-from .PaLM2 import PaLM2
-from .Vicuna import Vicuna
-from .GPT import GPT
-from .Llama import Llama
+try:
+    from .PaLM2 import PaLM2
+except ImportError:
+    PaLM2 = None
+
+try:
+    from .Vicuna import Vicuna
+except ImportError:
+    Vicuna = None
+
+try:
+    from .GPT import GPT
+except ImportError:
+    GPT = None
+
+try:
+    from .Llama import Llama
+except ImportError:
+    Llama = None
 import json
 
 def load_json(file_path):

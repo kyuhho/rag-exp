@@ -217,6 +217,12 @@ def main():
 
     print(f"Ret: {ret_list}")
     print(f"Precision mean: {ret_precision_mean}")
+    
+    # [ADDED] Explicit Poisoned Ratio Print
+    total_poisoned = np.sum(np.array(ret_list))
+    total_retrieved = len(np.array(ret_list).flatten()) * args.top_k
+    print(f"Poisoned Ratio: {total_poisoned / total_retrieved:.4f} {total_poisoned} / {total_retrieved}")
+
     print(f"Recall mean: {ret_recall_mean}")
     print(f"F1 mean: {ret_f1_mean}\n")
 
