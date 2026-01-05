@@ -56,7 +56,7 @@ retriever = E5_Retriever(
     device="cuda"
 )
 
-env = E5WikiEnv(retriever)
+env = E5WikiEnv(retriever, k=5)
 env = wrappers.HotPotQAWrapper(env, split="dev")
 env = wrappers.LoggingWrapper(env)
 
@@ -142,7 +142,7 @@ if __name__ == "__main__":
 
     items = list(qid_to_idx.items())
     if args.dry_run:
-        items = items[:1]
+        items = items[:50]
         print("Dry run enabled: only the first sample will be processed.")
 
     results = []

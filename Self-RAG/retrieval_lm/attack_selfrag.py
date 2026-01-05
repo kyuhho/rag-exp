@@ -360,7 +360,8 @@ def main():
     prompts = []
     all_results = []
     asr_success_count = 0
-    poisoned_retrieval_count = 0
+    total_poisoned_docs = 0
+    poisoned_questions_count = 0
     input_data = []
 
     print("Starting Evaluation...")
@@ -374,17 +375,11 @@ def main():
         
         # Format for Self-RAG (contents -> text)
         evidences = []
-        any_poisoned = False
-        for res in retriever_results:
-            evidences.append({
-                "title": res['title'],
-                "text": res['contents']
-            })
-            if res.get('is_poisoned', False):
-                any_poisoned = True
-        
-        if any_poisoned:
-            poisoned_retrieval_count += 1
+        num_poisoned = sum(1 for res in retriever_results if res.get('is_poisoned', False))
+        total_poisoned_docs += num_poisoned
+        if num_poisoned > 0:
+            any_poisoned = True
+            poisoned_questions_count += 1
 
         # Prepare Prompt
         # Use TASK_INST for instruction
@@ -413,22 +408,27 @@ def main():
             "target_answer": target_answer,
             "asr_success": is_asr_success,
             "any_poisoned": any_poisoned,
+            "num_poisoned": num_poisoned,
             "results": results
         })
 
-        if i % 10 == 0:
-            print(f"Current ASR: {asr_success_count / (i+1):.4f} | Poisoned Ratio: {poisoned_retrieval_count / (i+1):.4f}")
+        print(f"ASR Success: {is_asr_success} | Poisoned Docs: {num_poisoned}/{args.ndocs}")
+
+        if (i + 1) % 10 == 0:
+            print(f"[{i+1}/{total_count}] Current ASR: {asr_success_count / (i+1):.4f} | Poisoned Question Ratio: {poisoned_questions_count / (i+1):.4f}")
 
     # Final Summary
     total = len(target_qids)
     asr_mean = asr_success_count / total if total > 0 else 0
-    poison_ratio = poisoned_retrieval_count / total if total > 0 else 0
+    poison_question_ratio = poisoned_questions_count / total if total > 0 else 0
+    poison_docs_ratio = total_poisoned_docs / (total * args.ndocs) if total > 0 else 0
 
     print("\n" + "="*50)
     print("FINAL ATTACK RESULTS (Self-RAG)")
     print(f"Total Questions: {total}")
     print(f"Attack Success Rate (ASR): {asr_mean:.4f}")
-    print(f"Poisoned Retrieval Ratio: {poison_ratio:.4f} ({poisoned_retrieval_count}/{total})")
+    print(f"Poisoned Question Ratio: {poison_question_ratio:.4f} ({poisoned_questions_count}/{total})")
+    print(f"Poisoned Docs Ratio: {poison_docs_ratio:.4f} ({total_poisoned_docs}/{total * args.ndocs})")
     print("="*50)
 
     # Save results
