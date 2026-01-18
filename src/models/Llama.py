@@ -12,10 +12,25 @@ class Llama(Model):
         self.max_output_tokens = config["params"]["max_output_tokens"]
 
         api_pos = int(config["api_key_info"]["api_key_use"])
-        hf_token = config["api_key_info"]["api_keys"][api_pos]
+        hf_token = None
+        if "api_key_info" in config and "api_keys" in config["api_key_info"]:
+            api_pos = int(config["api_key_info"].get("api_key_use", 0))
+            if api_pos < len(config["api_key_info"]["api_keys"]):
+                hf_token = config["api_key_info"]["api_keys"][api_pos]
 
-        self.tokenizer = LlamaTokenizer.from_pretrained(self.name, use_auth_token=hf_token)
-        self.model = LlamaForCausalLM.from_pretrained(self.name, torch_dtype=torch.float16, use_auth_token=hf_token).to(self.device)
+        self.tokenizer = LlamaTokenizer.from_pretrained(
+            self.name, 
+            use_auth_token=hf_token,
+            local_files_only=True if not hf_token else False # 토큰이 없으면 로컬 파일만 확인
+        )
+        self.model = LlamaForCausalLM.from_pretrained(
+            self.name, 
+            torch_dtype=torch.float16, 
+            use_auth_token=hf_token,
+            local_files_only=True if not hf_token else False
+        ).to(self.device)
+        # self.tokenizer = LlamaTokenizer.from_pretrained(self.name, use_auth_token=hf_token)
+        # self.model = LlamaForCausalLM.from_pretrained(self.name, torch_dtype=torch.float16, use_auth_token=hf_token).to(self.device)
 
     def query(self, msg):
         input_ids = self.tokenizer(msg, return_tensors="pt").input_ids.to("cuda")

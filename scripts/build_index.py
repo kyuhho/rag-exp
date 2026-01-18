@@ -27,7 +27,7 @@ def main():
     parser.add_argument('--corpus_path', type=str, required=True, help='Path to corpus.jsonl')
     parser.add_argument('--output_dir', type=str, required=True, help='Directory to save .pt shards')
     parser.add_argument('--model_name', type=str, default='intfloat/e5-large-v2', help='Encoder model name')
-    parser.add_argument('--batch_size', type=int, default=128, help='Inference batch size')
+    parser.add_argument('--batch_size', type=int, default=1024, help='Inference batch size')
     parser.add_argument('--shard_size', type=int, default=100000, help='Number of documents per shard')
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
     args = parser.parse_args()

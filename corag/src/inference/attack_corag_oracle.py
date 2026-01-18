@@ -8,6 +8,8 @@ import sys
 import re
 from collections import Counter, defaultdict
 
+from vllm import LLM, SamplingParams
+
 # Add necessary paths to sys.path
 current_dir = os.path.dirname(os.path.abspath(__file__))
 # 1. Add corag/src to import local modules (config, agent, etc.)
@@ -21,9 +23,10 @@ if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
 from transformers import HfArgumentParser
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict
 from datasets import Dataset
+from tqdm import tqdm
 
 from config import Arguments
 from logger_config import logger
@@ -31,7 +34,7 @@ from vllm_client import VllmClient, get_vllm_model_id
 from utils import save_json_to_file, AtomicCounter
 
 from src.e5_retriever import E5_Retriever
-from agent import CoRagAgent, RagPath
+from agent import MalCoRagAgent, RagPath
 
 logging.getLogger("openai").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -45,50 +48,63 @@ if "--base" in sys.argv:
 else:
     print(">>> MODE: ATTACK (Poisoned Corpus Included)")
 
-vllm_port = int(os.environ.get('VLLM_PORT', 8000))
-vllm_host = os.environ.get('VLLM_HOST', 'localhost')
 
 parser = HfArgumentParser((Arguments,))
 args: Arguments = parser.parse_args_into_dataclasses()[0]
 logger.info('Args={}'.format(str(args)))
 
-vllm_client: VllmClient = VllmClient(
-    model=get_vllm_model_id(host=vllm_host, port=vllm_port),
-    host=vllm_host,
-    port=vllm_port
-)
+vllm_client: VllmClient = VllmClient(model=get_vllm_model_id())
 corpus: Dataset = Dataset.from_dict({})
 
 # [변경됨] 2. 모드에 따른 경로 설정
 if is_base_mode:
     poisoned_index_path = None
     poisoned_corpus_path = None
-    trajectory_results_dir = '/home/work/Redteaming/rag-exp/results/trajectory_results'
+    trajectory_results_dir = '/home/work/Redteaming/rag-exp/results/trajectory_results/corag'
     results_path = os.path.join(trajectory_results_dir, 'clean_results_corag.json')
 else:
-    # poisoned_index_path = "../datasets/hotpotqa/e5_index_poisoned"
-    # poisoned_corpus_path = "../datasets/hotpotqa/poisoned_corpus.jsonl"
-    poisoned_index_path = "../datasets/hotpotqa/e5_index_poisoned_x3"
-    poisoned_corpus_path = "../datasets/hotpotqa/poisoned_corpus_x3.jsonl"
-    # poisoned_index_path = "../datasets/hotpotqa/e5_index_poisoned_subquery_corag"
-    # poisoned_corpus_path = "../datasets/hotpotqa/poisoned_corpus_subquery_corag.jsonl"
-    # poisoned_index_path = "../datasets/hotpotqa/e5_index_poisoned_sub_target_qwen"
-    # poisoned_corpus_path = "../datasets/hotpotqa/poisoned_corpus_sub_target_qwen.jsonl"
+    poisoned_index_path = None
+    poisoned_corpus_path = None
     trajectory_results_dir = '/home/work/Redteaming/rag-exp/results/trajectory_results/corag'
-    results_path = os.path.join(trajectory_results_dir, 'poisoned_results_corag_sub_target_qwen.json')
+    results_path = os.path.join(trajectory_results_dir, 'poisoned_results_oracle.json')
 
-# Initialize E5_Retriever for attack
-logger.info(f"Initializing E5_Retriever... (Base Mode: {is_base_mode})")
-retriever = E5_Retriever(
-    index_dir="../datasets/hotpotqa/e5_index", 
-    corpus_path="../datasets/hotpotqa/corpus.jsonl",
-    poisoned_index_dir=poisoned_index_path, # 변수로 변경됨
-    poisoned_corpus_path=poisoned_corpus_path, # 변수로 변경됨
-    model_name="/home/work/Redteaming/data1/VIDEO_HALLUCINATION/hf_cache/hub/models--intfloat--e5-large-v2/snapshots/f169b11e22de13617baa190a028a32f3493550b6",
-    device="cuda" if torch.cuda.is_available() else "cpu"
+retrieval_mode = True
+
+model_name = "/home/work/Redteaming/data1/REDTEAMING_LLM/cache/hub/models--deepseek-ai--DeepSeek-R1-Distill-Qwen-32B/snapshots/711ad2ea6aa40cfca18895e8aca02ab92df1a746"
+    
+llm = LLM(
+    model=model_name,
+    tensor_parallel_size=1,  # GPU 개수에 맞게 조정
+    dtype="auto",
+    trust_remote_code=True,
+    max_model_len=16384,  # 필요에 따라 조정
 )
 
-corag_agent: CoRagAgent = CoRagAgent(vllm_client=vllm_client, corpus=corpus, retriever=retriever)
+# Get tokenizer from vLLM
+tokenizer = llm.get_tokenizer()
+
+# Set up sampling parameters
+sampling_params = SamplingParams(
+    temperature=0.7,
+    top_p=0.9,
+    max_tokens=16384,
+)
+
+# Initialize E5_Retriever for attack
+if retrieval_mode:
+    logger.info(f"Initializing E5_Retriever... (Base Mode: {is_base_mode})")
+    retriever = E5_Retriever(
+        index_dir="../datasets/hotpotqa/e5_index", 
+        corpus_path="../datasets/hotpotqa/corpus.jsonl",
+        poisoned_index_dir=poisoned_index_path,
+        poisoned_corpus_path=poisoned_corpus_path,
+        model_name="/home/work/Redteaming/data1/VIDEO_HALLUCINATION/hf_cache/hub/models--intfloat--e5-large-v2/snapshots/f169b11e22de13617baa190a028a32f3493550b6",
+        device="cuda:1" if torch.cuda.is_available() else "cpu"
+    )
+else:
+    retriever = None
+
+corag_agent: MalCoRagAgent = MalCoRagAgent(vllm_client=vllm_client, corpus=corpus, retriever=retriever, adv_generator=llm, adv_tokenizer=tokenizer, adv_sampling_params=sampling_params, retrieval_mode=retrieval_mode)
 processed_cnt: AtomicCounter = AtomicCounter()
 total_cnt: int = 0
 import string
@@ -177,7 +193,11 @@ def _generate_single_example(ex: Dict) -> Dict:
     print("-"*50)
     if args.decode_strategy == 'greedy' or args.max_path_length < 1:
         path: RagPath = corag_agent.sample_path(
-            query=ex['query'], task_desc=ex.get('task_desc', 'answer multi-hop questions'),
+            qid=ex['id'],
+            query=ex['query'],
+            correct_answer=ex['answers'][0],
+            target_answer=ex['incorrect_answer'],
+            task_desc=ex.get('task_desc', 'answer multi-hop questions'),
             max_path_length=args.max_path_length,
             temperature=0., max_tokens=64
         )
@@ -361,7 +381,24 @@ def main():
     global total_cnt
     total_cnt = len(adv_data)
 
-    results: List[Dict] = list(executor.map(_generate_single_example, adv_data))
+    # Use tqdm to show progress
+    results: List[Dict] = []
+    futures = {executor.submit(_generate_single_example, ex): ex for ex in adv_data}
+    
+    with tqdm(total=len(adv_data), desc="Processing adversarial examples") as pbar:
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+                results.append(result)
+                pbar.update(1)
+            except Exception as e:
+                ex = futures[future]
+                logger.error(f"Error processing example {ex.get('id', 'unknown')}: {e}")
+                pbar.update(1)
+    
+    # Sort results to maintain original order
+    results_dict = {res.get('id'): res for res in results}
+    results = [results_dict.get(ex.get('id')) for ex in adv_data if results_dict.get(ex.get('id'))]
 
     # 4. Final Summary
     total = len(results)

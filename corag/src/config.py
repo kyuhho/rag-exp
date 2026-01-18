@@ -38,6 +38,12 @@ class Arguments(TrainingArguments):
     # available: greedy, tree_search, best_of_n
     decode_strategy: str = field(default='greedy', metadata={'help': 'decoding strategy'})
     best_n: int = field(default=4, metadata={'help': 'best of n'})
+    
+    # Shard-related arguments
+    data_path: Optional[str] = field(default=None, metadata={'help': 'Data path'})
+    trajs_path: Optional[str] = field(default=None, metadata={'help': 'Trajs path'})
+    num_shards: Optional[int] = field(default=None, metadata={'help': 'Total number of shards'})
+    shard_id: Optional[int] = field(default=None, metadata={'help': 'Current shard id (0-indexed)'})
 
     def __post_init__(self):
         super(Arguments, self).__post_init__()

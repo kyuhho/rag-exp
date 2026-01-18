@@ -5,6 +5,7 @@ import json
 import torch
 import torch.nn.functional as F
 from typing import List, Dict, Tuple, Optional
+from logzero import logger
 try:
     from .models.encoder import SimpleEncoder
 except (ImportError, ValueError):
@@ -100,6 +101,23 @@ class E5_Retriever:
     def encode_queries(self, queries: List[str]) -> torch.Tensor:
         # Delegate to the Clean SimpleEncoder
         return self.encoder.encode_queries(queries).to(self.device)
+
+    # for oracle attack
+    def add_corpus(self, corpus: List[Dict]):
+        # embed new corpus
+        if not corpus:
+            return
+
+        if self.all_embeddings is not None:
+            new_embeddings = self.encoder.encode_corpus(corpus).to(self.all_embeddings.dtype).to(self.device)
+            self.all_embeddings = torch.cat([self.all_embeddings, new_embeddings], dim=0)
+        else:
+            new_embeddings = self.encoder.encode_corpus(corpus).to(self.device)
+            self.all_embeddings = new_embeddings
+        
+        self.corpus.extend(corpus)
+
+        logger.info(f"Added {len(corpus)} new corpus to the retriever.")
 
     def search(self, query: str, k: int = 5) -> List[Dict]:
         """

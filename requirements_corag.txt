@@ -26,7 +26,6 @@ exceptiongroup==1.3.1
 fastapi==0.128.0
 fastchat==0.1.0
 filelock==3.20.1
-flash-attn @ file:///data/seohyeong2/rag/PoisonedRAG/corag/flash_attn-2.7.0.post2%2Bcu12torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl#sha256=eb4eb73682931a7c591a97ff12926b392ebea4c67e8d9846537925fbfcddaecf
 frozenlist==1.8.0
 fsspec==2024.5.0
 gguf==0.9.1

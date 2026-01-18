@@ -294,4 +294,4 @@ dependencies:
       - xgrammar==0.1.27
       - xxhash==3.6.0
       - yarl==1.22.0
-prefix: /data/seohyeong2/.conda/envs/react
+prefix: /home/work/.conda/envs/react

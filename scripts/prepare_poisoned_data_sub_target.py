@@ -12,12 +12,13 @@ def prepare_poisoned_corpus(input_path, output_path):
         question = entry['question']
         target_answer = entry['incorrect answer']
         adv_texts = entry['adv_texts']
+        adv_subqueries = entry['adv_subqueries']
         
-        for i, adv_text in enumerate(adv_texts):
+        for i, (adv_text, adv_subquery) in enumerate(zip(adv_texts, adv_subqueries)):
             # Using _id and text to match original corpus.jsonl
             doc = {
                 "_id": f"poison_{qid}_{i}",
-                "title": question, # Use question as title for high retrieval score
+                "title": adv_subquery, # Use question as title for high retrieval score
                 "text": adv_text,
                 "metadata": {
                     "original_id": qid,
@@ -37,6 +38,6 @@ def prepare_poisoned_corpus(input_path, output_path):
     print(f"Poisoned corpus saved to {output_path}")
 
 if __name__ == "__main__":
-    INPUT_FILE = "results/adv_targeted_results/hotpotqa_x3.json"
-    OUTPUT_FILE = "datasets/hotpotqa/poisoned_corpus_x3.jsonl"
+    INPUT_FILE = "results/adv_targeted_results/hotpotqa_multi_qwen.json"
+    OUTPUT_FILE = "datasets/hotpotqa/poisoned_corpus_sub_target_qwen.jsonl"
     prepare_poisoned_corpus(INPUT_FILE, OUTPUT_FILE)

@@ -188,4 +188,4 @@ dependencies:
       - wcwidth==0.2.14
       - xxhash==3.6.0
       - yarl==1.22.0
-prefix: /data/seohyeong2/.conda/envs/rag
+prefix: /home/work/.conda/envs/rag
